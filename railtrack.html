@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RailTrack - Hackathon Master Demo</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #f4f5f7;
+            --card-blue: #1a364a;
+            --btn-red: #c92a2a;
+            --text-dark: #222;
+            --text-muted: #666;
+            --border-light: #e0e0e0;
+        }
+
+        body { font-family: 'Inter', sans-serif; background-color: #e5e5e5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .phone-container { background-color: var(--bg-color); width: 375px; height: 812px; border-radius: 40px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); overflow: hidden; position: relative; padding: 24px; box-sizing: border-box; display: flex; flex-direction: column; }
+        
+        .screen { transition: opacity 0.4s ease; height: 100%; display: flex; flex-direction: column; }
+        .hidden { display: none !important; opacity: 0; }
+        
+        .app-title { font-weight: 700; font-size: 24px; color: var(--text-dark); margin: 0 0 8px 0; text-align: center; }
+        .app-subtitle { font-size: 14px; color: var(--text-muted); margin: 0 0 32px 0; text-align: center; }
+        .input-label { display: block; font-size: 13px; font-weight: 600; color: var(--text-dark); margin-bottom: 8px; }
+        .input-wrapper { background: white; border-radius: 12px; border: 1px solid var(--border-light); display: flex; align-items: center; padding: 0 16px; margin-bottom: 16px; }
+        input { border: none; outline: none; width: 100%; padding: 16px 0; font-size: 15px; color: var(--text-dark); font-family: inherit; }
+        
+        .btn-primary { background-color: var(--btn-red); color: white; border: none; border-radius: 12px; padding: 16px; width: 100%; font-size: 16px; font-weight: 600; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px; margin-bottom: 16px; transition: all 0.3s;}
+        .btn-google { background-color: white; color: var(--text-dark); border: 1px solid var(--border-light); border-radius: 12px; padding: 16px; width: 100%; font-size: 15px; font-weight: 600; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 12px; margin-bottom: 16px; }
+        .divider { text-align: center; color: #aaa; font-size: 12px; margin-bottom: 16px; }
+        
+        /* OTP Styles */
+        .otp-inputs { display: flex; justify-content: space-between; margin-bottom: 8px; }
+        .otp-inputs input { width: 50px; height: 60px; text-align: center; font-size: 24px; font-weight: 700; border: 1px solid var(--border-light); border-radius: 12px; padding: 0; }
+        .error-msg { color: var(--btn-red); font-size: 13px; text-align: center; height: 20px; font-weight: 600; margin-bottom: 10px;}
+
+        /* Tracker Styles */
+        .hero-card { background-color: var(--card-blue); border-radius: 20px; padding: 24px; color: white; margin-bottom: 32px; margin-top:20px; }
+        .status-badge { background-color: rgba(255,255,255,0.1); padding: 4px 10px; border-radius: 12px; font-size: 10px; font-weight: 600; display: inline-flex; align-items: center; margin-bottom: 16px; }
+        .status-dot { width: 6px; height: 6px; background-color: #4ade80; border-radius: 50%; margin-right: 6px; }
+        .results-card { display: none; background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border-light); margin-top: 16px; }
+        
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        @keyframes shake { 0%, 100% {transform: translateX(0);} 25% {transform: translateX(-5px);} 75% {transform: translateX(5px);} }
+        .shake-animation { animation: shake 0.3s ease-in-out; }
+    </style>
+</head>
+<body>
+
+<div class="phone-container">
+    
+    <div id="loginScreen" class="screen" style="justify-content: center;">
+        <div style="text-align: center;">
+            <div style="width: 64px; height: 64px; background: var(--btn-red); border-radius: 50%; display: inline-flex; justify-content: center; align-items: center; margin-bottom: 16px;">
+                <svg viewBox="0 0 24 24" style="fill: white; width: 32px; height: 32px;"><path d="M12 2c-4 0-8 .5-8 4v9.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h12v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V6c0-3.5-4-4-8-4zM7.5 17c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm3.5-7H6V6h5v4zm4 0h-5V6h5v4zm2.5 7c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
+            </div>
+            <h1 class="app-title">RailTrack</h1>
+            <p class="app-subtitle">Log in to track your train</p>
+        </div>
+
+        <label class="input-label">Email Address</label>
+        <div class="input-wrapper">
+            <input type="email" id="emailInput" placeholder="name@example.com">
+        </div>
+        <button class="btn-primary" onclick="triggerOTP('email')">Send Login Code</button>
+        
+        <div class="divider">or</div>
+        
+        <button class="btn-google" id="googleBtn" onclick="triggerOTP('google')">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M21.35 11.1h-9.17v2.73h5.51c-.18 1.16-.89 2.11-1.89 2.76v2.3h3.06c1.79-1.64 2.82-4.06 2.82-6.85 0-.66-.06-1.32-.16-1.94z" fill="#4285F4"/><path d="M12.18 21.4c2.61 0 4.8-.86 6.4-2.33l-3.06-2.3c-.87.58-1.97.92-3.34.92-2.56 0-4.73-1.73-5.5-4.06H3.53v2.38c1.6 3.19 4.93 5.39 8.65 5.39z" fill="#34A853"/><path d="M6.68 13.63c-.2-.58-.3-1.2-.3-1.83s.1-1.25.3-1.83V7.59H3.53c-.66 1.3-1.03 2.77-1.03 4.31s.37 3.01 1.03 4.31l3.15-2.58z" fill="#FBBC05"/><path d="M12.18 5.4c1.42 0 2.69.49 3.7 1.45l2.77-2.77c-1.66-1.54-3.85-2.48-6.47-2.48-3.72 0-7.05 2.2-8.65 5.39l3.15 2.38c.77-2.33 2.94-4.06 5.5-4.06z" fill="#EA4335"/></svg>
+            Continue with Google
+        </button>
+    </div>
+
+    <div id="otpScreen" class="screen hidden" style="justify-content: center;">
+        <h1 class="app-title">Check your email</h1>
+        <p class="app-subtitle" id="otpMessage">We sent a 4-digit code to your email.</p>
+        
+        <div class="otp-inputs" id="otpBox">
+            <input type="number" id="otp1" maxlength="1" oninput="moveToNext(this, 'otp2')">
+            <input type="number" id="otp2" maxlength="1" oninput="moveToNext(this, 'otp3')">
+            <input type="number" id="otp3" maxlength="1" oninput="moveToNext(this, 'otp4')">
+            <input type="number" id="otp4" maxlength="1">
+        </div>
+        
+        <div class="error-msg" id="otpError"></div>
+        
+        <button class="btn-primary" onclick="verifyCode()">Verify & Login</button>
+        <p style="text-align: center; font-size: 13px; color: #666; cursor: pointer;" onclick="goBackToLogin()">← Back to login</p>
+    </div>
+
+    <div id="trackerScreen" class="screen hidden">
+        <div class="hero-card">
+            <div class="status-badge"><div class="status-dot"></div> LIVE TRAIN STATUS</div>
+            <h2 style="margin:0 0 10px 0; font-size: 26px;">Know when your train arrives.</h2>
+            <p style="margin:0; font-size:13px; opacity:0.8;">Real-time arrival estimates for your boarding station.</p>
+        </div>
+
+        <label class="input-label">Train Number</label>
+        <div class="input-wrapper"><input type="number" id="trainInput" placeholder="e.g. 12951"></div>
+
+        <label class="input-label">Boarding Station</label>
+        <div class="input-wrapper"><input type="text" id="stationInput" placeholder="Station Code" style="text-transform: uppercase;"></div>
+
+        <button class="btn-primary" id="trackBtn" onclick="simulateETA()">Get Live ETA</button>
+
+        <div class="results-card" id="resultsCard">
+            <p style="margin: 0 0 8px 0; font-size:13px; color:#666;">Current Loc: <strong id="outLoc" style="color:#222;">...</strong></p>
+            <p style="margin: 0 0 8px 0; font-size:13px; color:#666;">AI Status: <strong id="outStatus" style="color:#222;">...</strong></p>
+            <span style="color:var(--btn-red); font-weight:700;">Dynamic Delay: +<span id="outDelay">0</span> mins</span>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Screen Navigation
+    function switchScreen(hideId, showId) {
+        const hideEl = document.getElementById(hideId);
+        const showEl = document.getElementById(showId);
+        hideEl.style.opacity = "0";
+        setTimeout(() => {
+            hideEl.classList.add('hidden');
+            showEl.classList.remove('hidden');
+            setTimeout(() => { showEl.style.opacity = "1"; }, 50);
+        }, 400);
+    }
+
+    // Login Action
+    function triggerOTP(type) {
+        const email = document.getElementById('emailInput').value;
+        const msg = document.getElementById('otpMessage');
+        const googleBtn = document.getElementById('googleBtn');
+        
+        if(type === 'google') {
+            googleBtn.innerHTML = "Authenticating...";
+            googleBtn.style.opacity = "0.7";
+            setTimeout(() => {
+                msg.innerText = "We sent a 4-digit code to your Google email.";
+                switchScreen('loginScreen', 'otpScreen');
+                googleBtn.innerHTML = "Continue with Google";
+                googleBtn.style.opacity = "1";
+            }, 1000);
+        } else {
+            msg.innerText = email ? `We sent a 4-digit code to ${email}.` : "We sent a 4-digit code to your email.";
+            switchScreen('loginScreen', 'otpScreen');
+        }
+    }
+
+    // OTP Input UX
+    function moveToNext(current, nextFieldID) {
+        if (current.value.length >= 1) {
+            document.getElementById(nextFieldID).focus();
+        }
+    }
+
+    // Master Passcode Validation (Code is 1234)
+    function verifyCode() {
+        const code = document.getElementById('otp1').value + 
+                     document.getElementById('otp2').value + 
+                     document.getElementById('otp3').value + 
+                     document.getElementById('otp4').value;
+        const error = document.getElementById('otpError');
+        const otpBox = document.getElementById('otpBox');
+        
+        if(code === "1234") {
+            error.innerText = "";
+            switchScreen('otpScreen', 'trackerScreen');
+        } else {
+            error.innerText = "Invalid verification code. Try again.";
+            otpBox.classList.remove('shake-animation');
+            void otpBox.offsetWidth; // Trigger reflow
+            otpBox.classList.add('shake-animation');
+        }
+    }
+
+    function goBackToLogin() {
+        document.getElementById('otpError').innerText = "";
+        switchScreen('otpScreen', 'loginScreen');
+    }
+
+    // Mock AI Engine for Tracker
+    function simulateETA() {
+        const train = document.getElementById('trainInput').value;
+        const station = document.getElementById('stationInput').value;
+        const btn = document.getElementById('trackBtn');
+        const results = document.getElementById('resultsCard');
+
+        if(!train || !station) {
+            alert("Please enter Train Number and Station!");
+            return;
+        }
+
+        // Visual loading state
+        btn.style.opacity = "0.7";
+        btn.innerHTML = `<svg style="animation: spin 1s linear infinite; width:18px; height:18px; fill:white;" viewBox="0 0 24 24"><path d="M12 2v4c4.41 0 8 3.59 8 8s-3.59 8-8 8-8-3.59-8-8H2c0 5.52 4.48 10 10 10s10-4.48 10-10S17.52 2 12 2z"/></svg> Processing Data...`;
+        results.style.display = 'none';
+
+        // Fake AI Logic: Generates different data based on the train number
+        setTimeout(() => {
+            btn.style.opacity = "1";
+            btn.style.backgroundColor = "#2e7d32"; 
+            btn.innerHTML = "ETA Updated ✓";
+
+            // Randomizer to make the demo look real
+            const locations = ["Departed Mathura Jn.", "Crossed Outer Signal", "Halted at Ghaziabad", "Departed Kanpur Central"];
+            const statuses = ["Route Congestion Detected", "Weather Speed Restriction", "Platform Clearance Delay", "Unscheduled Halt"];
+            
+            // Pick a random index based on train length/number so it feels somewhat consistent but dynamic
+            const randomizer = train.length + Math.floor(Math.random() * 4);
+            const mockDelay = Math.floor(Math.random() * 45) + 5; // Generates a delay between 5 and 50 mins
+
+            document.getElementById('outLoc').innerText = locations[randomizer % locations.length];
+            document.getElementById('outStatus').innerText = statuses[randomizer % statuses.length];
+            document.getElementById('outDelay').innerText = mockDelay;
+            
+            results.style.display = 'block';
+            
+            // Reset button after 3 seconds for another search
+            setTimeout(() => {
+                btn.style.backgroundColor = "var(--btn-red)";
+                btn.innerHTML = "Get Live ETA";
+            }, 3000);
+
+        }, 2000);
+    }
+</script>
+
+</body>
+</html>
