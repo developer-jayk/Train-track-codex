@@ -28,7 +28,9 @@ SETU AI is a next-generation predictive intelligence platform built to eliminate
 
 ## 🚀 The Proposed Solution
 
-**SETU AI** serves as a dual-sided predictive core built for both **passengers** and **railway controllers**. By blending historical line metrics, real-time track density, live weather telemetry, and train priority hierarchies, the system delivers precise future forecasts and open, honest delay factors.
+
+**SETU AI** operates as a two-way predictive system designed specifically for **commuters** and **network dispatchers**. By synthesizing historical schedule performance, real-time line occupancy, live meteorological feeds, and locomotive precedence protocols, the engine outputs highly accurate arrival projections alongside transparent explanations for service disruptions.
+
 
 ---
 
@@ -56,8 +58,8 @@ $$Delta_{\text{downstream}} = f(\Delta_{\text{current}}, D_{\text{remaining}}, V
 
 ---
 ## 📐 Production Architecture & Data Flow
-Plaintext
 ```
+
 ┌─────────────────────────────────────────────────────────────┐
 │                       External Data Layer                   │
 │   RapidAPI (IRCTC Telemetry)  │   Open-Meteo Weather API    │
@@ -105,18 +107,8 @@ Grand Chord Route: New Delhi → Prayagraj → Howrah (Train #22436, #12301)
 Western Trunk Line: Hazrat Nizamuddin (Delhi) → Kota → Mumbai Central (Train #12951)
 
 Southern Corridor: KSR Bengaluru → Jolarpettai → MGR Chennai Central (Train #12007)
----
-## 🔄 End-to-End System Data Flow
 
-The platform handles real-time data across asynchronous boundaries to protect processing speeds:
 
-1. **Ingestion Layer:** Asynchronous HTTP clients poll live tracking points to pull immediate transit variables like location, speed, and current delay status.
-2. **Environmental Fusion:** The system maps coordinate data directly to the `Open-Meteo` weather API to check path visibility down to the exact meter.
-3. **Smart In-Memory Caching:** To avoid hitting external API rate limits and save costs, an intelligent interceptor handles repeat lookups. If a train is queried again within a **30-second Time-To-Live (TTL)** window, the system serves the cached data instantly.
-4. **Predictive Processing Engine:** Clean data matrices feed into the Gradient Boosting model, calculating future travel times based on route distance and section traffic density.
-5. **XAI Translation & Output Egress:** Raw model outputs pass through an attribution matrix that turns feature weights into human-readable text strings, serving structured JSON through high-speed `FastAPI` endpoints.
-
----
 
 ## 🔌 API Specification & Sample Responses
 
@@ -176,44 +168,59 @@ The system categorizes risk into three distinct statuses:
   * `speed_kmh` (Speed in Kilometers per Hour)
   * `active_block_section` (Current track block)
 
+---
+
 ## ⚙️ Quickstart & Local Setup
-Prerequisites
-Python 3.10 or higher
+
+Prerequisites Python 3.10 or higher
 
 Git
 
-Installation Steps
-Bash
+Installation Steps Bash
+
 ### 1. Clone the repository
-git clone [https://github.com/sahejpreet-glitch/Train-track-codex.git](https://github.com/sahejpreet-glitch/Train-track-codex.git)
-cd Train-track-codex
+```bash
+git clone https://github.com/sahejpreet-glitch/Train-track-codex.git cd Train-track-codex
+```
 
 ### 2. Set up virtual environment
+```bash
 python -m venv venv
+```
 
-### On Windows:
+#### On Windows:
+```bash
 .\venv\Scripts\activate
-### On Linux/macOS:
+```
+
+#### On Linux/macOS:
+```bash
 source venv/bin/activate
+```
 
 ### 3. Install core dependencies
+```bash
 pip install -r requirements.txt
+```
 
 ### 4. Launch backend server
+
+```bash
 uvicorn main:app --reload --port 8000
-View Live Dashboard
-Open index.html in any modern web browser or run with VS Code Live Server. The dashboard will automatically latch onto ws://127.0.0.1:8000 and stream live data.
+```
+View Live Dashboard Open index.html in any modern web browser or run with VS Code Live Server. The dashboard will automatically latch onto ws://127.0.0.1:8000 and stream live data.
 
-Interactive Swagger Docs: http://127.0.0.1:8000/docs
+Interactive Swagger Docs: http://127.0.0
 
-System Health Endpoint: http://127.0.0.1:8000/
+System Health Endpoint: http://127.0.0
+
 
 ---
 
 ## 👥 Engineering Team
 Developed for the Hackathon by:IIT BHU
 
-Backend, ML & Geospatial Architecture: Ayush Kumar & Jay kumar
+Backend, ML & Geospatial Architecture: Ayush Kumar & Jay Kumar
 
 Project Lead & Frontend Integration: Sahejpreet Singh
 
