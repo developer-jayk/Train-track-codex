@@ -1,87 +1,220 @@
-# TEAM_NAME AI: Intelligent Train ETA Forecasting & Dynamic Delay Propagation System
+# SETU AI: Intelligent Train ETA Forecasting & Dynamic Delay Propagation System
 
-An end-to-end predictive intelligence platform engineered to eliminate downstream delay blindspots in mega-scale rail networks like Indian Railways. By combining machine learning with Explainable AI (XAI), **TEAM_NAME AI** transforms reactive train tracking into proactive, probabilistic dispatch and transit scheduling.
+SETU AI is a next-generation predictive intelligence platform built to eliminate downstream arrival blind spots across massive rail networks like Indian Railways. By pairing advanced machine learning with Explainable AI (XAI), the platform upgrades traditional reactive tracking into an active, probabilistic dispatching ecosystem.
+
+---
+## 📸 Interactive System Preview
+
+| Live Geospatial Tracking & Telemetry | Explainable AI (XAI) & Delay Intervals |
+| :--- | :--- |
+| Real-time multi-corridor WebSocket rake movement <br><br> Dynamic vector polylines across 4 Indian Railway trunk routes | Uncertainty bounds & root-cause <br><br> Breakdown of hold reasons (+14m Precedence, +8m Fog) |
+
 
 ---
 
-## 🎯 The Core Problem
+## ⚡ Why Existing Systems Fail vs. Our Solution
 
-Traditional rail tracking systems are **reactive**. They only report delays *after* a train has physically passed a sensor checkpoint. This creates critical operational bottlenecks:
 
-* **Downstream Compounding Blindspot:** Naive calculations fail to forecast how minor upstream delays compound exponentially due to junction saturation.
-* **Static Deterministic Figures:** Passengers receive static arrival times that fluctuate wildly, causing anxiety and missed multi-modal connections.
-* **Opacity in Root Causes:** Commuters receive generic "delayed" flags with zero context regarding weather (e.g., heavy fog) or operational choices.
-* **Dispatcher Data Silos:** Railway authorities lack real-time predictive simulation tools to evaluate how a single routing decision ripples across a busy corridor.
+| Feature | Legacy Rail Tracking (NTES / Apps) | RailForecast AI Engine |
+| :--- | :--- | :--- |
+| **Delay Calculation** | Static & linear | Compounding ML model accounting for section density |
+| **ETA Reliability** | Single deterministic timestamp (frequently wrong) | Probabilistic Confidence Intervals** |
+| **Transparency (XAI)** | Blank delay status or generic "operational reason" | **Quantified root causes** (Precedence hold vs. Weather) |
+| **Corridor Awareness** | Siloed to individual trains | **Fleet-wide radar** tracking cascade congestion |
+| **Map Rendering** | Static station-to-station straight lines | **Vector polylines + Sub-second WebSocket interpolation** |
+
 
 ---
 
 ## 🚀 The Proposed Solution
 
-**TEAM_NAME AI** is a dual-stakeholder predictive engine designed for both **passengers** and **railway dispatch authorities**.The system fuses historical corridor data, live section density, real-time weather feeds, and train priority matrices to deliver highly accurate downstream forecasts and transparent delay reasons.
+**SETU AI** serves as a dual-sided predictive core built for both **passengers** and **railway controllers**. By blending historical line metrics, real-time track density, live weather telemetry, and train priority hierarchies, the system delivers precise future forecasts and open, honest delay factors.
 
 ---
 
-## ✨ Key Features & Technical Innovation
+## 🧠 Machine Learning & Inference Pipeline
 
-### 🔮 1. Proactive Downstream Forecasting
-Predicts station-level arrival and departure times up to **4–5 stations in advance** before physical delays manifest.
+The engine formulates delay propagation as an asymmetric non-linear regression problem:
 
-### 📊 2. Confidence Interval Modeling
-Replaces misleading static timestamps with quantified prediction windows and probabilistic reliability scores.
+$$Delta_{\text{downstream}} = f(\Delta_{\text{current}}, D_{\text{remaining}}, V_{\text{weather}}, P_{\text{rake}}, H_{\text{density}})$$
 
-### 🧠 3. Explainable AI (XAI) Root-Cause Attribution
-Translates black-box ML predictions into human-readable delay drivers (e.g., *70% Fog Visibility Impact vs. 30% Precedence Track Regulation*).
+```text
+[ Feature Extraction ]
+  ├── Current Delay (mins)
+  ├── Distance to Terminal (km)
+  ├── Live Atmospheric Visibility (Open-Meteo API in meters)
+  ├── Priority Class (1.0 for Rajdhani/Vande Bharat, 0.4 for Passenger/Freight)
+  └── Headway Saturation Index (0.0 to 1.0)
+         │
+         ▼
+[ Scikit-Learn Gradient Boosting Regressor ]
+         │
+         ├── Mean Prediction (Compounding ETA Delay)
+         ├── Quantile Loss Regression (P10 lower bound & P90 upper bound)
+         └── Attribution Engine (XAI feature weight extraction)
+```
 
-### 🎛️ 4. Dual-Stakeholder Interactive Portals
-* **For Commuters:** Visualizes transit connection risks and live tracking.
-* **For Operators:** A complete "What-If" sandbox suite allowing dispatchers to simulate how holding a lower-priority rake ripples across upcoming traffic corridors.
+---
+## 📐 Production Architecture & Data Flow
+Plaintext
+```
+┌─────────────────────────────────────────────────────────────┐
+│                       External Data Layer                   │
+│   RapidAPI (IRCTC Telemetry)  │   Open-Meteo Weather API    │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│         FastAPI Resilient Ingestion & Caching Layer         │
+│   • 30s TTL In-Memory Store (Zero API Quota Burnout)        │
+│   • Graceful Deterministic Fallback Engine                  │
+└──────────────┬───────────────────────────────┬──────────────┘
+               │                               │
+               ▼                               ▼
+┌──────────────────────────────┐ ┌────────────────────────────┐
+│      ML & XAI Predictor      │ │ Geospatial Route Simulator │
+│ • Compounding Delay Model    │ │ • Multi-Corridor Polylines │
+│ • P10-P90 Confidence Windows │ │ • Dynamic Lat/Lng Stepper  │
+│ • Root-Cause Attribution     │ │ • Block Section Resolution │
+└──────────────┬───────────────┘ └─────────────┬──────────────┘
+               │                               │
+               └───────────────┬───────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│                 Client Communication Interfaces             │
+│    REST Endpoints (/api/v1)   │   WebSocket Stream (/ws)    │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│               Frontend Mission Control (Leaflet)            │
+│  Real-time Rake Motion • Dynamic Routes • Fleet Radar Table │
+└─────────────────────────────────────────────────────────────┘
+```
 
-### 🛡️ 5. Resilient Architecture
-Built with a **3-tier graceful degradation pipeline** and open, low-latency B2B REST APIs to feed third-party ride-hailing and transit logistics platforms seamlessly.
+
+---
+## 🛣️ Covered High-Density Corridors
+The geospatial simulator maps real Indian Railway trunk routes dynamically based on train numbers:
+
+Central Corridor: Lokmanya Tilak Terminus (Mumbai) → Varanasi Junction (Train #12123)
+
+Grand Chord Route: New Delhi → Prayagraj → Howrah (Train #22436, #12301)
+
+Western Trunk Line: Hazrat Nizamuddin (Delhi) → Kota → Mumbai Central (Train #12951)
+
+Southern Corridor: KSR Bengaluru → Jolarpettai → MGR Chennai Central (Train #12007)
+---
+## 🔄 End-to-End System Data Flow
+
+The platform handles real-time data across asynchronous boundaries to protect processing speeds:
+
+1. **Ingestion Layer:** Asynchronous HTTP clients poll live tracking points to pull immediate transit variables like location, speed, and current delay status.
+2. **Environmental Fusion:** The system maps coordinate data directly to the `Open-Meteo` weather API to check path visibility down to the exact meter.
+3. **Smart In-Memory Caching:** To avoid hitting external API rate limits and save costs, an intelligent interceptor handles repeat lookups. If a train is queried again within a **30-second Time-To-Live (TTL)** window, the system serves the cached data instantly.
+4. **Predictive Processing Engine:** Clean data matrices feed into the Gradient Boosting model, calculating future travel times based on route distance and section traffic density.
+5. **XAI Translation & Output Egress:** Raw model outputs pass through an attribution matrix that turns feature weights into human-readable text strings, serving structured JSON through high-speed `FastAPI` endpoints.
 
 ---
 
-## 🛠️ Tech Stack & Production Environment
+## 🔌 API Specification & Sample Responses
 
-The project leverages a robust, modern data and API layer designed for high throughput and rapid analytical execution:
+Below are the endpoints and data models used in the system.
 
-* **API & Web Layer:** `FastAPI` (v0.141.1) & `Uvicorn` (v0.53.0) for high-performance asynchronous networking.
-* **Machine Learning Engine:** `Scikit-Learn` (v1.9.1) & `SciPy` (v1.18.1) for predictive modeling.
-* **Data Processing Pipeline:** `Pandas` (v3.0.5) & `NumPy` (v2.5.3) for rapid real-time matrix transformations.
-* **Async Telemetry Networking:** `HTTPX` (v0.28.1) & `AnyIO` (v4.15.1) for non-blocking fetch of live weather telemetry.
-* **Data Validation:** `Pydantic` (v2.13.5) ensuring strict, error-free incoming API payloads.
 
----
+### 1. ML Delay Forecast & XAI
+* **Endpoint:** `GET /api/v1/trains/{train_number}/forecast`
+* **Description:** Returns machine learning delay predictions along with explainable AI (XAI) root causes.
 
-## ⚙️ Local Installation & Setup
+#### Sample JSON Response
+```json
+{
+  "train_number": "12123",
+  "train_name": "Deccan Queen Express",
+  "current_delay_mins": 15,
+  "predicted_downstream_delay_mins": 34,
+  "confidence_score": 88,
+  "prediction_interval": {
+    "p10_mins": 28,
+    "p90_mins": 42
+  },
+  "weather_telemetry": {
+    "visibility_meters": 450,
+    "condition": "Severe Fog Alert"
+  },
+  "root_causes": [
+    {
+      "factor": "Precedence Loop Line Hold",
+      "impact_mins": 11
+    },
+    {
+      "factor": "Weather Fog Speed Restriction",
+      "impact_mins": 8
+    }
+  ]
+}
+```
 
-Get the system up and running on your local machine in two quick steps.
 
-### Prerequisites
-Make sure you have Python 3.10+ installed on your system.
+### 2. Multi-Train Fleet Radar
+* **Endpoint:** `GET /api/v1/corridor/fleet-overview`
+* **Description:** Returns the active corridor state across all tracked rakes. 
 
-### 1. Clone & Install Dependencies
-Navigate into your project folder and install the required packages:
-```bash
+#### Systemic Risk Levels
+The system categorizes risk into three distinct statuses:
+* 🟢 **NOMINAL** – Normal operating conditions.
+* 🟡 **MODERATE PROPAGATION** – Minor delays spreading through the corridor.
+* 🔴 **CRITICAL BOTTLENECK** – Severe congestion causing major holdups.
+
+
+### 3. Sub-Second Broadcasts
+* **Description:** Continuous coordinate streams sent every **2 seconds** to ensure ultra-smooth marker transitions on user interface (UI) maps.
+* **Data Fields Transmitted:**
+  * `lat` (Latitude)
+  * `lng` (Longitude)
+  * `speed_kmh` (Speed in Kilometers per Hour)
+  * `active_block_section` (Current track block)
+
+## ⚙️ Quickstart & Local Setup
+Prerequisites
+Python 3.10 or higher
+
+Git
+
+Installation Steps
+Bash
+### 1. Clone the repository
+git clone [https://github.com/sahejpreet-glitch/Train-track-codex.git](https://github.com/sahejpreet-glitch/Train-track-codex.git)
+cd Train-track-codex
+
+### 2. Set up virtual environment
+python -m venv venv
+
+### On Windows:
+.\venv\Scripts\activate
+### On Linux/macOS:
+source venv/bin/activate
+
+### 3. Install core dependencies
 pip install -r requirements.txt
-```
 
-### 2. Launch the Predictive Server
-Start the local FastAPI development server using Uvicorn:
-```bash
-uvicorn main:app --reload
-```
-Once started, you can access the interactive API docs at `http://127.0.0`.
+### 4. Launch backend server
+uvicorn main:app --reload --port 8000
+View Live Dashboard
+Open index.html in any modern web browser or run with VS Code Live Server. The dashboard will automatically latch onto ws://127.0.0.1:8000 and stream live data.
+
+Interactive Swagger Docs: http://127.0.0.1:8000/docs
+
+System Health Endpoint: http://127.0.0.1:8000/
 
 ---
 
-## 💼 Business & Societal Impact
+## 👥 Engineering Team
+Developed for the Hackathon by:IIT BHU
 
-### 🗺️ Passenger Experience
-Reduces severe station waiting anxiety and eliminates missed connecting trains via automated, predictive connection-risk alerts.
+Backend, ML & Geospatial Architecture: Ayush Kumar & Jay kumar
 
-### 🚉 Station Operations
-Mitigates dangerous platform overcrowding by streamlining passenger arrival patterns and optimizing train turnaround cycles.
+Project Lead & Frontend Integration: Sahejpreet Singh
 
-### 🔌 Ecosystem Integration
-Powers external third-party platforms (ride-hailing, transit logistics, and hospitality) with low-latency APIs for just-in-time station pickups.
+
