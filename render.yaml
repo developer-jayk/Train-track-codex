@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: setu-rail-intelligence
+    runtime: python
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: uvicorn main:app --app-dir backend --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.8"
+      - key: CORS_ALLOWED_ORIGINS
+        value: ""
+      - key: RAPIDAPI_KEY
+        sync: false
+      - key: RAPIDAPI_HOST
+        value: irctc1.p.rapidapi.com
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.0-flash
+      - key: EMAIL_PROVIDER
+        value: ""
+      - key: EMAIL_API_KEY
+        sync: false
+      - key: FEEDBACK_EMAIL
+        sync: false

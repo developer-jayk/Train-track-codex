@@ -3,6 +3,7 @@ import re
 import ssl
 import smtplib
 import httpx
+from html import escape
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional
 from email.mime.text import MIMEText
@@ -89,9 +90,9 @@ def _build_email_subject(data: Dict[str, Any]) -> str:
     return f"SETU Feedback — {rating}/5 — {category}"
 
 def _build_plain_text_body(data: Dict[str, Any]) -> str:
-    name = str(data.get("name") or "Not provided").strip()
-    email = str(data.get("email") or "Not provided").strip()
-    feedback_type = str(data.get("feedback_type") or "General Feedback").strip()
+    name = escape(str(data.get("name") or "Not provided").strip())
+    email = escape(str(data.get("email") or "Not provided").strip())
+    feedback_type = escape(str(data.get("feedback_type") or "General Feedback").strip())
     rating = int(data.get("rating", 5))
     stars = _format_star_rating(rating)
     message = str(data.get("message") or "").strip()
@@ -136,10 +137,10 @@ def _build_html_body(data: Dict[str, Any]) -> str:
     feedback_type = str(data.get("feedback_type") or "General Feedback").strip()
     rating = int(data.get("rating", 5))
     stars = _format_star_rating(rating)
-    message = str(data.get("message") or "").strip().replace("\n", "<br/>")
-    train_no = str(data.get("train_number") or "Not provided").strip()
-    journey_date = str(data.get("journey_date") or "Not provided").strip()
-    boarding_station = str(data.get("boarding_station") or "Not provided").strip()
+    message = escape(str(data.get("message") or "").strip()).replace("\n", "<br/>")
+    train_no = escape(str(data.get("train_number") or "Not provided").strip())
+    journey_date = escape(str(data.get("journey_date") or "Not provided").strip())
+    boarding_station = escape(str(data.get("boarding_station") or "Not provided").strip())
     submitted_at = _get_ist_timestamp()
 
     return f"""<!DOCTYPE html>
