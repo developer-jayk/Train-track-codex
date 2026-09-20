@@ -1,10 +1,14 @@
 import time
 import asyncio
 import re
+import os
+from pathlib import Path
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from typing import List, Dict, Any, Optional
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 # Local Module Imports
@@ -15,6 +19,7 @@ from external_apis import (
     get_live_station_board
 )
 from route_simulator import corridor_tracker, CORRIDOR_WAYPOINTS
+from gemini_service import explain_forecast
 from email_service import (
     dispatch_feedback_email,
     EmailDeliveryError,
@@ -31,14 +36,26 @@ app = FastAPI(
     version="2.0.0"
 )
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+app.mount(
+    "/dashboard",
+    StaticFiles(directory=str(PROJECT_ROOT), html=True),
+    name="dashboard",
+)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-        "*"
+    ] + [
+        origin.strip()
+        for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
+        if origin.strip()
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -104,6 +121,9 @@ class TrainForecastResponse(BaseModel):
     root_causes: List[RootCauseFactor]
     timeline: List[TimelineStop]
     full_route: Optional[List[StationStopDetail]] = None
+
+class ForecastExplanationRequest(BaseModel):
+    forecast: Dict[str, Any]
 
 class Waypoint(BaseModel):
     code: str
@@ -308,7 +328,8 @@ async def get_train_forecast(
 
     # 2. Date validation (Safe check)
     is_historical = False
-    clean_date = date.strip() if date else "2026-09-20"
+    india_now = datetime.now(ZoneInfo("Asia/Kolkata"))
+    clean_date = date.strip() if date else india_now.strftime("%Y-%m-%d")
 
     # 3. Route timetable (Safe execution)
     sched_info = None
@@ -349,35 +370,33 @@ async def get_train_forecast(
     except Exception:
         ml_output = {
             "predicted_delay_mins": int(cur_delay + 4),
-            "confidence_score": 0.88,
+            "confidence_score": 88,
             "interval": {"p10_mins": max(0, int(cur_delay - 2)), "p90_mins": int(cur_delay + 12)},
-            "root_causes": ["Section Speed Restriction", "Signal Clearance Queue"]
+            "root_causes": [
+                {"factor": "Section Speed Restriction", "impact_mins": 4},
+                {"factor": "Signal Clearance Queue", "impact_mins": 3},
+            ]
         }
 
     # Timeline & Route stops safe mapping
     full_route_stops = (sched_info.get("stations", []) if isinstance(sched_info, dict) else [])
     
-    # Agar route stops nahi mile toh default 3-point timeline bana do
     timeline = [
         {
-            "station": live_train.get("current_station", "Origin Station"),
-            "scheduled": "10:00 AM",
-            "predicted": "10:10 AM",
-            "status": "Departed"
-        },
-        {
-            "station": "Intermediate Junction",
-            "scheduled": "12:30 PM",
-            "predicted": "12:45 PM",
-            "status": "In Transit"
-        },
-        {
-            "station": "Destination Terminal",
-            "scheduled": "04:00 PM",
-            "predicted": "04:20 PM",
-            "status": "Scheduled"
+            "station": station["station_name"],
+            "scheduled": station["scheduled_arrival"],
+            "predicted": station["actual_arrival"] or station["scheduled_arrival"],
+            "status": station["status"],
         }
+        for station in full_route_stops
     ]
+    if not timeline:
+        timeline = [{
+            "station": live_train.get("current_station", "Running on Section"),
+            "scheduled": india_now.strftime("%I:%M %p"),
+            "predicted": india_now.strftime("%I:%M %p"),
+            "status": "In Transit",
+        }]
 
     weather_desc = "Severe Fog Alert" if visibility_m < 500 else ("Moderate Mist" if visibility_m < 2000 else "Clear Visibility")
 
@@ -385,27 +404,49 @@ async def get_train_forecast(
         "train_number": live_train.get("train_number", clean_no),
         "train_name": live_train.get("train_name", f"Express ({clean_no})"),
         "journey_date": clean_date,
+        "observed_at": india_now.isoformat(),
+        "data_is_live": bool(live_train.get("is_live_api")),
         "boarding_station": boarding_station,
-        "telemetry_source": "RESILIENT_DETERMINISTIC_CACHE",
-        "current_status": "RUNNING - LIVE",
+        "telemetry_source": "RAPIDAPI_LIVE" if live_train.get("is_live_api") else "DETERMINISTIC_FALLBACK",
+        "current_status": "RUNNING - LIVE" if live_train.get("is_live_api") else "RUNNING - ESTIMATED",
         "current_speed_kmh": live_train.get("current_speed_kmh", 75),
         "current_delay_mins": live_train.get("current_delay_mins", 0),
         "predicted_downstream_delay_mins": ml_output.get("predicted_delay_mins", 10),
-        "confidence_score": ml_output.get("confidence_score", 0.85),
+        "confidence_score": int(ml_output.get("confidence_score", 85)),
         "prediction_interval": {
             "p10_mins": ml_output.get("interval", {}).get("p10_mins", 5),
             "p90_mins": ml_output.get("interval", {}).get("p90_mins", 20)
         },
-        "next_station": f"{live_train.get('current_station', 'Next')} Outer",
+        "next_station": (
+            sched_info.get("next_station", "Running on Section")
+            if isinstance(sched_info, dict)
+            else "Running on Section"
+        ),
         "weather_telemetry": {
             "visibility_meters": visibility_m,
             "condition": weather_desc
         },
         "previous_station_departure": sched_info.get("previous_station_departure") if isinstance(sched_info, dict) else None,
-        "root_causes": ml_output.get("root_causes", ["Section Signal Headway"]),
+        "root_causes": ml_output.get("root_causes", [
+            {"factor": "Section Signal Headway", "impact_mins": 3}
+        ]),
         "timeline": timeline,
         "full_route": full_route_stops
     }
+
+@app.post(
+    "/api/v1/trains/{train_number}/explanation",
+    tags=["Passenger Intelligence"],
+)
+async def explain_train_forecast(
+    train_number: str,
+    payload: ForecastExplanationRequest,
+):
+    """Explain an already fetched forecast; Gemini cannot provide railway facts."""
+    if str(payload.forecast.get("train_number", "")).strip() != str(train_number).strip():
+        raise HTTPException(status_code=400, detail="Forecast train number does not match the URL.")
+    return await explain_forecast(payload.forecast)
+
 # ---------------------------------------------------------
 # 2. Geospatial Telemetry: Route Polylines & Live Coordinates
 # ---------------------------------------------------------
@@ -438,11 +479,15 @@ def get_route_geometry(train_number: str, date: Optional[str] = None):
             {
                 "station_code": w.get("code", "STN"),
                 "station_name": w.get("name", "Station"),
-                "arrival_time": "10:00 AM",
-                "departure_time": "10:05 AM",
-                "halt_mins": 5,
+                "scheduled_arrival": "10:00 AM",
+                "scheduled_departure": "10:05 AM",
+                "actual_arrival": "10:00 AM",
+                "actual_departure": "10:05 AM",
+                "delay_mins": 0,
+                "status": "Upcoming",
                 "distance_km": idx * 120,
-                "day_count": 1
+                "platform": None,
+                "is_boarding": False,
             }
             for idx, w in enumerate(waypoints)
         ]

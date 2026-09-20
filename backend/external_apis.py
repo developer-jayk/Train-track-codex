@@ -1,10 +1,11 @@
 # external_apis.py
 import httpx
 import time
+import os
 from typing import Dict, Any
 
-RAPIDAPI_KEY = "f60e64e0a6msh74c067b3f9f3d74p10ac1ejsn2c111270a518"
-RAPIDAPI_HOST = "irctc1.p.rapidapi.com"
+RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "").strip()
+RAPIDAPI_HOST = os.getenv("RAPIDAPI_HOST", "irctc1.p.rapidapi.com").strip()
 
 # Tier 2: Real Database of major Indian Railway Trains
 KNOWN_DATABASE: Dict[str, Dict[str, Any]] = {
@@ -42,6 +43,8 @@ async def fetch_live_train_running_status(train_no: str) -> Dict[str, Any]:
     params = {"trainNo": clean_no, "startDay": "0"}
 
     try:
+        if not RAPIDAPI_KEY:
+            raise RuntimeError("RAPIDAPI_KEY is not configured")
         async with httpx.AsyncClient(timeout=4.0) as client:
             res = await client.get(url, headers=headers, params=params)
             if res.status_code == 200:
@@ -124,6 +127,8 @@ async def get_live_station_board(station_code: str, hours: int = 4) -> Dict[str,
     params = {"fromStationCode": station_code.upper(), "hours": hours}
 
     try:
+        if not RAPIDAPI_KEY:
+            raise RuntimeError("RAPIDAPI_KEY is not configured")
         async with httpx.AsyncClient(timeout=4.0) as client:
             res = await client.get(url, headers=headers, params=params)
             if res.status_code == 200:

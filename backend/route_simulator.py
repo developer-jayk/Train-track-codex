@@ -1,6 +1,8 @@
 # backend/route_simulator.py
 import time
 import math
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from typing import Dict, Any, List
 from external_apis import KNOWN_TRAINS
 
@@ -13,6 +15,13 @@ CORRIDOR_WAYPOINTS: List[Dict[str, Any]] = [
     {"code": "JBP", "name": "Jabalpur", "lat": 23.1686, "lng": 79.9537},
     {"code": "PRYJ","name": "Prayagraj Jn", "lat": 25.4358, "lng": 81.8463},
     {"code": "BSB", "name": "Varanasi Jn", "lat": 25.3267, "lng": 82.9868}
+]
+
+GRAND_CHORD_WAYPOINTS: List[Dict[str, Any]] = [
+    {"code": "NDLS", "name": "New Delhi", "lat": 28.6430, "lng": 77.2194},
+    {"code": "CNB", "name": "Kanpur Central", "lat": 26.4547, "lng": 80.3507},
+    {"code": "PRYJ", "name": "Prayagraj Jn", "lat": 25.4358, "lng": 81.8463},
+    {"code": "BSB", "name": "Varanasi Jn", "lat": 25.3267, "lng": 82.9868},
 ]
 
 class MultiTrainCorridorTracker:
@@ -31,10 +40,74 @@ class MultiTrainCorridorTracker:
 
     def get_route_geometry_for_train(self, train_no: str) -> Dict[str, Any]:
         clean_no = str(train_no).strip()
+        waypoints = self._waypoints_for_train(clean_no)
         return {
             "train_number": clean_no,
-            "polyline": [[p["lat"], p["lng"]] for p in CORRIDOR_WAYPOINTS],
-            "waypoints": CORRIDOR_WAYPOINTS
+            "polyline": [[p["lat"], p["lng"]] for p in waypoints],
+            "waypoints": waypoints
+        }
+
+    def _waypoints_for_train(self, train_no: str) -> List[Dict[str, Any]]:
+        return GRAND_CHORD_WAYPOINTS if train_no in {"22436", "12301"} else CORRIDOR_WAYPOINTS
+
+    def get_full_route_schedule(
+        self,
+        train_no: str,
+        current_delay_mins: int = 0,
+        journey_date: str | None = None,
+        boarding_station: str | None = None,
+        is_historical: bool = False,
+    ) -> Dict[str, Any]:
+        clean_no = str(train_no).strip()
+        waypoints = self._waypoints_for_train(clean_no)
+        current_station = KNOWN_TRAINS.get(clean_no, {}).get("station", "")
+        current_code = next(
+            (point["code"] for point in waypoints
+             if point["code"] in current_station.upper()
+             or point["name"].upper() in current_station.upper()),
+            None,
+        )
+        current_index = next(
+            (index for index, point in enumerate(waypoints) if point["code"] == current_code),
+            -1,
+        )
+        base_date = datetime.strptime(
+            journey_date or datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d"),
+            "%Y-%m-%d",
+        ).replace(tzinfo=ZoneInfo("Asia/Kolkata"), hour=8, minute=0)
+        stations = []
+        for index, point in enumerate(waypoints):
+            scheduled = base_date + timedelta(hours=index * 2)
+            delay = max(0, int(current_delay_mins)) if index >= current_index >= 0 else 0
+            predicted = scheduled + timedelta(minutes=delay)
+            status = "Departed" if index <= current_index else "Upcoming"
+            if index == current_index + 1:
+                status = "In Transit"
+            stations.append({
+                "station_code": point["code"],
+                "station_name": point["name"],
+                "scheduled_arrival": scheduled.strftime("%I:%M %p"),
+                "scheduled_departure": (scheduled + timedelta(minutes=5)).strftime("%I:%M %p"),
+                "actual_arrival": predicted.strftime("%I:%M %p") if status == "Departed" else "",
+                "actual_departure": (predicted + timedelta(minutes=5)).strftime("%I:%M %p") if status == "Departed" else "",
+                "delay_mins": delay,
+                "status": status,
+                "distance_km": round(index * 220.0, 1),
+                "platform": None,
+                "is_boarding": bool(boarding_station and boarding_station.upper() == point["code"]),
+            })
+        next_station = waypoints[min(max(current_index + 1, 0), len(waypoints) - 1)]["name"]
+        previous = stations[current_index] if current_index >= 0 else None
+        return {
+            "stations": stations,
+            "next_station": next_station,
+            "previous_station_departure": {
+                "station_code": previous["station_code"],
+                "station_name": previous["station_name"],
+                "scheduled_departure": previous["scheduled_departure"],
+                "actual_departure": previous["actual_departure"],
+                "departure_delay_mins": previous["delay_mins"],
+            } if previous else None,
         }
 
     def get_telemetry_for_train(self, train_no: str) -> Dict[str, Any]:
@@ -43,10 +116,11 @@ class MultiTrainCorridorTracker:
             self._init_train_state(clean_no)
 
         state = self.train_states[clean_no]
-        total_segments = len(CORRIDOR_WAYPOINTS) - 1
+        waypoints = self._waypoints_for_train(clean_no)
+        total_segments = len(waypoints) - 1
         idx = state["segment_idx"] % total_segments
-        origin = CORRIDOR_WAYPOINTS[idx]
-        target = CORRIDOR_WAYPOINTS[idx + 1]
+        origin = waypoints[idx]
+        target = waypoints[idx + 1]
 
         fraction = (state["step"] % self.total_steps) / float(self.total_steps)
         state["step"] += 1

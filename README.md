@@ -1,5 +1,39 @@
 # SETU AI: Intelligent Train ETA Forecasting & Dynamic Delay Propagation System
 
+## Simple dashboard
+
+The project now includes a beginner-friendly static dashboard in `index.html`, `dashboard.css`, and `dashboard.js`.
+
+1. Start the backend from the `backend` folder:
+
+   ```powershell
+   uvicorn main:app --reload --port 8000
+   ```
+
+2. Start the frontend from the project root:
+
+   ```powershell
+   npm install
+   npm run dev
+   ```
+
+3. Open the Vite URL and log in with the demo account:
+
+   - Username: `student`
+   - Password: `setu123`
+
+The dashboard calls the forecast, route/telemetry, fleet overview, station board, dispatch solver, and feedback APIs. To point the dashboard at a deployed backend, set `window.SETU_API_URL` before `dashboard.js` loads, or set `localStorage.setItem("setu_api_url", "https://your-backend.example")` in the browser console.
+
+Hackathon-ready additions include a live telemetry monitor that refreshes every three seconds, corridor route intelligence with station markers, a calculated journey-risk score, and a downloadable plain-text train report. These are connected to existing backend endpoints rather than decorative demo controls.
+
+Gemini is optional and is used only for plain-language explanations of verified forecast facts. Put a newly rotated key in `backend/.env` as `GEMINI_API_KEY=...`; never put it in browser JavaScript. Gemini does not replace a railway live-status provider.
+
+The browser login is only a simple demo gate. It is not a secure authentication system; production login should be implemented as a backend-authenticated flow with hashed passwords and sessions or tokens.
+
+## Deploy on Render
+
+This repository includes [`render.yaml`](./render.yaml). Create a new Render Blueprint from the GitHub repository, add the secret environment variables when prompted, and deploy. The deployed dashboard is available at `/dashboard/`; the API health check is available at `/`.
+
 SETU AI is a next-generation predictive intelligence platform built to eliminate downstream arrival blind spots across massive rail networks like Indian Railways. By pairing advanced machine learning with Explainable AI (XAI), the platform upgrades traditional reactive tracking into an active, probabilistic dispatching ecosystem.
 
 ---
@@ -223,5 +257,3 @@ Developed for the Hackathon by:IIT BHU
 Backend, ML & Geospatial Architecture: Ayush Kumar & Jay Kumar
 
 Project Lead & Frontend Integration: Sahejpreet Singh
-
-
