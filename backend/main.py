@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 # Local Module Imports
@@ -190,7 +191,11 @@ def is_feedback_rate_limited(client_ip: str) -> bool:
 # ---------------------------------------------------------
 # Health & Root Check
 # ---------------------------------------------------------
-@app.get("/", tags=["System Health"])
+@app.get("/", include_in_schema=False)
+def root_redirect():
+    return RedirectResponse(url="/dashboard/")
+
+@app.get("/health", tags=["System Health"])
 def root_check():
     return {
         "system": "RailForecast AI Engine",

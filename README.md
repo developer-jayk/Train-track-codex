@@ -32,7 +32,7 @@ The browser login is only a simple demo gate. It is not a secure authentication 
 
 ## Deploy on Render
 
-This repository includes [`render.yaml`](./render.yaml). Create a new Render Blueprint from the GitHub repository, add the secret environment variables when prompted, and deploy. The deployed dashboard is available at `/dashboard/`; the API health check is available at `/`.
+This repository includes [`render.yaml`](./render.yaml). Create a new Render Blueprint from the GitHub repository, add the secret environment variables when prompted, and deploy. The deployed dashboard is available at `/dashboard/`; the API health check is available at `/health`. The root URL `/` redirects to the dashboard.
 
 SETU AI is a next-generation predictive intelligence platform built to eliminate downstream arrival blind spots across massive rail networks like Indian Railways. By pairing advanced machine learning with Explainable AI (XAI), the platform upgrades traditional reactive tracking into an active, probabilistic dispatching ecosystem.
 
