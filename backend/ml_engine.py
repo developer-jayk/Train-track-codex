@@ -1,4 +1,10 @@
 # ml_engine.py
+"""
+Operational Prototype Simulation Engine
+Note: The GradientBoostingRegressor in this module is trained on synthetic benchmark samples
+for dispatch simulation prototypes. For production LIVE/HYBRID modes, predictions are computed
+using verified actual delay, speed, weather, and section headway parameters.
+"""
 import numpy as np
 import pandas as pd
 from typing import Dict, Any
@@ -6,6 +12,7 @@ from sklearn.ensemble import GradientBoostingRegressor
 
 class TrainDelayPredictor:
     def __init__(self):
+        self.model_type = "PROTOTYPE_SIMULATION_GBR"
         self._train_engine()
 
     def _train_engine(self):

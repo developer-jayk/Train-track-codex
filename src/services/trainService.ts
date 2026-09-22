@@ -61,6 +61,8 @@ interface BackendTrainForecastResponse {
   prediction_interval: BackendPredictionInterval;
   next_station: string;
   weather_telemetry?: BackendWeatherTelemetry;
+  platform?: string;
+  platform_status?: string;
   previous_station_departure?: BackendPreviousStationDeparture;
   root_causes?: BackendRootCause[];
   timeline?: BackendTimelineStop[];
@@ -208,7 +210,11 @@ function mapBackendToTrainData(
     expectedDelayRange: [p10, p90],
     nextStationName: forecast.next_station || 'Approaching Section',
     nextStationEta: forecast.timeline?.[1]?.predicted || forecast.timeline?.[0]?.predicted || '02:00 AM',
-    platform: 'PF 2',
+    platform: forecast.platform
+      ? (forecast.platform.toUpperCase().startsWith('PF') || forecast.platform.toUpperCase().startsWith('PLATFORM')
+          ? forecast.platform
+          : `PF ${forecast.platform}`)
+      : 'Platform TBA',
     infoMessage,
     previousStationDeparture,
     delayFactors,

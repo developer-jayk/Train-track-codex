@@ -3,6 +3,11 @@ import { User, Cpu, Sparkles, Compass } from 'lucide-react';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 
+import sahejPhoto from '../../sources/sahej.jpeg';
+import ayushPhoto from '../../sources/ayush.jpeg';
+import jaxPhoto from '../../sources/jax.jpeg';
+import dishaPhoto from '../../sources/disha.jpeg';
+
 interface AboutPageProps {
   onNavigate: (page: 'home' | 'track' | 'about' | 'privacy' | 'feedback') => void;
 }
@@ -29,7 +34,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
         'UI/UX implementation',
         'SETU visual experience',
       ],
-      photo: '/sahej.jpeg',
+      photo: sahejPhoto,
       isLeader: true,
     },
     {
@@ -42,7 +47,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
         'API/backend integration',
         'Core system implementation',
       ],
-      photo: '/ayush.jpeg',
+      photo: ayushPhoto,
       isLeader: false,
     },
     {
@@ -55,20 +60,22 @@ export const AboutPage: React.FC<AboutPageProps> = ({ onNavigate }) => {
         'Backend development support',
         'Technical problem analysis',
       ],
-      photo: '/jax.jpeg',
+      photo: jaxPhoto,
       isLeader: false,
     },
     {
       name: 'MahaVidhya Diwedi',
-      role: 'Presentation & Media',
+      role: 'Research, Presentation & Media',
       description:
-        "Contributed to the project's presentation and media work, helping communicate SETU's idea clearly through the pitch deck and video content.",
+        "Contributed to the research behind SETU and helped communicate the project's technical concept through the presentation, pitch deck, and media content.",
       responsibilities: [
-        'PPT / presentation',
-        'Video content',
+        'Research and problem analysis',
+        'Railway/ETA concept research',
+        'Presentation and pitch deck',
+        'Video and media content',
         'Project communication',
       ],
-      photo: '/disha.jpeg',
+      photo: dishaPhoto,
       isLeader: false,
     },
   ];

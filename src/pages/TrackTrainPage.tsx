@@ -18,7 +18,7 @@ interface TrackTrainPageProps {
   onNavigate: (page: 'home' | 'track' | 'about' | 'privacy' | 'feedback') => void;
 }
 
-const TODAY_DATE = new Date().toISOString().slice(0, 10);
+const TODAY_DATE = new Date().toISOString().split('T')[0];
 
 export const TrackTrainPage: React.FC<TrackTrainPageProps> = ({
   initialTrainNumber = DEFAULT_TRAIN_NUMBER,
