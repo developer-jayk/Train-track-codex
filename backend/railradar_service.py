@@ -249,7 +249,7 @@ class RailRadarProvider:
                 "status": "DATA_UNAVAILABLE",
                 "error_code": "TIMEOUT",
                 "http_status": 504,
-                "message": "RailRadar request timed out. Railway telemetry temporarily unavailable.",
+                "message": f"RailRadar request timed out on {endpoint}. Railway telemetry temporarily unavailable.",
                 "data": None
             }
         except (httpx.ConnectError, httpx.NetworkError) as net_err:
@@ -285,7 +285,7 @@ class RailRadarProvider:
         endpoint = f"/v1/trains/{clean_no}"
         params = {"haltsOnly": "true"}
 
-        res = await self._request(endpoint, params=params, cache_ttl=3600.0)
+        res = await self._request(endpoint, params=params, cache_ttl=86400.0)
         if res.get("status") != "OK":
             return res
 

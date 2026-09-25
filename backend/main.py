@@ -532,7 +532,7 @@ async def get_train_forecast(
     # =========================================================
     sched_res, live_res = await asyncio.gather(
         railradar_provider.get_train_schedule(clean_no),
-        railradar_provider.get_live_status(clean_no, date=clean_date, authoritative=True)
+        railradar_provider.get_live_status(clean_no, date=clean_date, authoritative=False)
     )
 
     if sched_res.get("status") == "NOT_FOUND":
