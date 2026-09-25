@@ -157,91 +157,91 @@ class RailRadarProvider:
         try:
             client = await self._get_client()
             res = await client.get(url, headers=self._get_headers(), params=params)
-                elapsed_ms = round((time.time() - start_time) * 1000, 1)
-                
-                logger.info(f"GET {endpoint} -> HTTP {res.status_code} ({elapsed_ms}ms)")
+            elapsed_ms = round((time.time() - start_time) * 1000, 1)
+            
+            logger.info(f"GET {endpoint} -> HTTP {res.status_code} ({elapsed_ms}ms)")
 
-                # 1. Successful 200 OK
-                if res.status_code == 200:
-                    payload = res.json()
-                    if payload.get("success") is False:
-                        err_code = payload.get("error", {}).get("code", "API_ERROR")
-                        err_msg = payload.get("error", {}).get("message", "RailRadar error")
-                        return {
-                            "status": "NOT_FOUND" if err_code == "TRAIN_NOT_FOUND" else "ERROR",
-                            "error_code": err_code,
-                            "http_status": 200,
-                            "message": err_msg,
-                            "data": None
-                        }
-                    result = {
-                        "status": "OK",
+            # 1. Successful 200 OK
+            if res.status_code == 200:
+                payload = res.json()
+                if payload.get("success") is False:
+                    err_code = payload.get("error", {}).get("code", "API_ERROR")
+                    err_msg = payload.get("error", {}).get("message", "RailRadar error")
+                    return {
+                        "status": "NOT_FOUND" if err_code == "TRAIN_NOT_FOUND" else "ERROR",
+                        "error_code": err_code,
                         "http_status": 200,
-                        "data": payload.get("data"),
-                        "meta": payload.get("meta")
-                    }
-                    if cache_ttl > 0:
-                        self._cache[cache_key] = {"ts": now, "data": result}
-                    return result
-
-                # 2. Train / Resource Not Found (404)
-                if res.status_code == 404:
-                    err_payload = res.json() if res.text.startswith("{") else {}
-                    err_msg = err_payload.get("error", {}).get("message") or f"Resource at {endpoint} not found."
-                    return {
-                        "status": "NOT_FOUND",
-                        "error_code": "TRAIN_NOT_FOUND",
-                        "http_status": 404,
                         "message": err_msg,
                         "data": None
                     }
+                result = {
+                    "status": "OK",
+                    "http_status": 200,
+                    "data": payload.get("data"),
+                    "meta": payload.get("meta")
+                }
+                if cache_ttl > 0:
+                    self._cache[cache_key] = {"ts": now, "data": result}
+                return result
 
-                # 3. Authentication Failure (401)
-                if res.status_code == 401:
-                    logger.critical(f"RailRadar authentication rejected (HTTP 401): {res.text}")
-                    return {
-                        "status": "DATA_UNAVAILABLE",
-                        "error_code": "UNAUTHORIZED",
-                        "http_status": 401,
-                        "message": "RailRadar authentication failed. Please verify the active API key.",
-                        "data": None
-                    }
-
-                # 4. Rate Limiting (429)
-                if res.status_code == 429:
-                    logger.warning("RailRadar rate limit reached (HTTP 429)")
-                    # If we have any cached entry (even if slightly older), return it to keep SETU resilient
-                    if cache_key in self._cache:
-                        logger.info(f"Serving stale cached entry for {endpoint} due to 429 rate limit")
-                        return self._cache[cache_key]["data"]
-                    return {
-                        "status": "DATA_UNAVAILABLE",
-                        "error_code": "RATE_LIMITED",
-                        "http_status": 429,
-                        "message": "RailRadar API rate limit reached. Railway telemetry temporarily unavailable.",
-                        "data": None
-                    }
-
-                # 5. Bad Request (400)
-                if res.status_code == 400:
-                    err_payload = res.json() if res.text.startswith("{") else {}
-                    err_msg = err_payload.get("error", {}).get("message") or "Bad request parameters."
-                    return {
-                        "status": "ERROR",
-                        "error_code": "BAD_REQUEST",
-                        "http_status": 400,
-                        "message": err_msg,
-                        "data": None
-                    }
-
-                # 6. Upstream Server Errors (500, 502, 503, 504)
+            # 2. Train / Resource Not Found (404)
+            if res.status_code == 404:
+                err_payload = res.json() if res.text.startswith("{") else {}
+                err_msg = err_payload.get("error", {}).get("message") or f"Resource at {endpoint} not found."
                 return {
-                    "status": "DATA_UNAVAILABLE",
-                    "error_code": "PROVIDER_ERROR",
-                    "http_status": res.status_code,
-                    "message": f"RailRadar service error (HTTP {res.status_code}). Telemetry temporarily unavailable.",
+                    "status": "NOT_FOUND",
+                    "error_code": "TRAIN_NOT_FOUND",
+                    "http_status": 404,
+                    "message": err_msg,
                     "data": None
                 }
+
+            # 3. Authentication Failure (401)
+            if res.status_code == 401:
+                logger.critical(f"RailRadar authentication rejected (HTTP 401): {res.text}")
+                return {
+                    "status": "DATA_UNAVAILABLE",
+                    "error_code": "UNAUTHORIZED",
+                    "http_status": 401,
+                    "message": "RailRadar authentication failed. Please verify the active API key.",
+                    "data": None
+                }
+
+            # 4. Rate Limiting (429)
+            if res.status_code == 429:
+                logger.warning("RailRadar rate limit reached (HTTP 429)")
+                # If we have any cached entry (even if slightly older), return it to keep SETU resilient
+                if cache_key in self._cache:
+                    logger.info(f"Serving stale cached entry for {endpoint} due to 429 rate limit")
+                    return self._cache[cache_key]["data"]
+                return {
+                    "status": "DATA_UNAVAILABLE",
+                    "error_code": "RATE_LIMITED",
+                    "http_status": 429,
+                    "message": "RailRadar API rate limit reached. Railway telemetry temporarily unavailable.",
+                    "data": None
+                }
+
+            # 5. Bad Request (400)
+            if res.status_code == 400:
+                err_payload = res.json() if res.text.startswith("{") else {}
+                err_msg = err_payload.get("error", {}).get("message") or "Bad request parameters."
+                return {
+                    "status": "ERROR",
+                    "error_code": "BAD_REQUEST",
+                    "http_status": 400,
+                    "message": err_msg,
+                    "data": None
+                }
+
+            # 6. Upstream Server Errors (500, 502, 503, 504)
+            return {
+                "status": "DATA_UNAVAILABLE",
+                "error_code": "PROVIDER_ERROR",
+                "http_status": res.status_code,
+                "message": f"RailRadar service error (HTTP {res.status_code}). Telemetry temporarily unavailable.",
+                "data": None
+            }
 
         except httpx.TimeoutException:
             logger.warning(f"Timeout querying RailRadar: GET {endpoint} exceeded {self.timeout}s")
