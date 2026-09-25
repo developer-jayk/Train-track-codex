@@ -60,6 +60,8 @@ app.mount(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "https://train-track-codex.vercel.app",
+        "https://train-track-codex-git-main-sahejpreet-glitch.vercel.app",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:4173",
@@ -71,6 +73,7 @@ app.add_middleware(
         for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
         if origin.strip()
     ],
+    allow_origin_regex=r"^https:\/\/.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -524,9 +527,14 @@ async def get_train_forecast(
         )
 
     # =========================================================
-    # Step 1: Query Real Schedule / Timetable from RailRadar
+    # Step 1 & 2: Concurrently Query Real Schedule and Live Status from RailRadar
+    # (Concurrent fetch cuts cross-region cloud egress latency in half)
     # =========================================================
-    sched_res = await railradar_provider.get_train_schedule(clean_no)
+    sched_res, live_res = await asyncio.gather(
+        railradar_provider.get_train_schedule(clean_no),
+        railradar_provider.get_live_status(clean_no, date=clean_date, authoritative=True)
+    )
+
     if sched_res.get("status") == "NOT_FOUND":
         raise HTTPException(
             status_code=404,
@@ -556,10 +564,6 @@ async def get_train_forecast(
                 detail=f"Station '{boarding_station}' is not a scheduled halt on the route of Train {clean_no} ({sched_res.get('train_name')})."
             )
 
-    # =========================================================
-    # Step 2: Query Live Running Status from RailRadar
-    # =========================================================
-    live_res = await railradar_provider.get_live_status(clean_no, date=clean_date, authoritative=True)
     is_live_ok = (live_res.get("status") == "OK")
 
     if is_live_ok:

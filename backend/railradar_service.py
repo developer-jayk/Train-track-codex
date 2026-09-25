@@ -61,11 +61,29 @@ class RailRadarProvider:
     """
 
     def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
-        self.api_key = (api_key or RAILRADAR_API_KEY).strip()
+        self.api_key = (api_key or RAILRADAR_API_KEY).strip().strip('"').strip("'")
         self.base_url = (base_url or RAILRADAR_BASE_URL).rstrip("/")
-        self.timeout = 10.0  # seconds
+        # Production cross-region timeout: 15s connect, 25s read to handle cloud egress latency
+        self.timeout = httpx.Timeout(connect=15.0, read=25.0, write=15.0, pool=15.0)
         self._cache: Dict[str, Dict[str, Any]] = self._load_disk_cache()
         self._rate_limit_reset_ts: float = 0.0
+        self._client: Optional[httpx.AsyncClient] = None
+
+    async def _get_client(self) -> httpx.AsyncClient:
+        """Maintains a persistent client with connection pooling and keep-alive."""
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(
+                timeout=self.timeout,
+                follow_redirects=True,
+                limits=httpx.Limits(max_keepalive_connections=10, max_connections=20, keepalive_expiry=60.0)
+            )
+        return self._client
+
+    async def close(self):
+        """Cleanly close persistent client pool if open."""
+        if self._client and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
 
     def _load_disk_cache(self) -> Dict[str, Dict[str, Any]]:
         try:
@@ -85,12 +103,15 @@ class RailRadarProvider:
             logger.warning(f"Error saving disk cache: {e}")
 
     def _get_headers(self) -> Dict[str, str]:
-        if not self.api_key:
+        clean_key = self.api_key.strip().strip('"').strip("'")
+        if not clean_key:
             logger.error("RAILRADAR_API_KEY is not configured in backend environment!")
         return {
-            "Authorization": f"Bearer {self.api_key}",
+            "Authorization": f"Bearer {clean_key}",
             "Accept": "application/json",
-            "User-Agent": "SETU-RailForecast/2.2.0"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "keep-alive"
         }
 
     async def _request(
@@ -122,8 +143,9 @@ class RailRadarProvider:
             return self._cache[cache_key]["data"]
 
         start_time = time.time()
+        clean_key = self.api_key.strip().strip('"').strip("'")
         
-        if not self.api_key or self.api_key == "your_railradar_api_key_here":
+        if not clean_key or clean_key == "your_railradar_api_key_here":
             return {
                 "status": "DATA_UNAVAILABLE",
                 "error_code": "NO_API_KEY",
@@ -133,8 +155,8 @@ class RailRadarProvider:
             }
 
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                res = await client.get(url, headers=self._get_headers(), params=params)
+            client = await self._get_client()
+            res = await client.get(url, headers=self._get_headers(), params=params)
                 elapsed_ms = round((time.time() - start_time) * 1000, 1)
                 
                 logger.info(f"GET {endpoint} -> HTTP {res.status_code} ({elapsed_ms}ms)")
