@@ -298,8 +298,6 @@ async def fetch_live_weather(lat: Optional[float], lng: Optional[float]) -> Dict
     }
 
     try:
-        if not RAPIDAPI_KEY:
-            raise RuntimeError("RAPIDAPI_KEY is not configured")
         async with httpx.AsyncClient(timeout=4.0) as client:
             res = await client.get(url, params=params)
             if res.status_code == 200:

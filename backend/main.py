@@ -201,6 +201,71 @@ class TrainsBetweenResponse(BaseModel):
 
 
 # ---------------------------------------------------------
+# Time Formatting & Delay Arithmetic Helpers
+# ---------------------------------------------------------
+def extract_time_str(time_val: Optional[str]) -> Optional[str]:
+    """
+    Extracts HH:MM 24-hr time string from ISO string, datetime, or time string.
+    Returns None if missing, empty, or '--'.
+    e.g. '2026-09-25T19:43:00+05:30' -> '19:43'
+         '19:43:00' -> '19:43'
+         '19:43' -> '19:43'
+         '07:43 PM' -> '19:43'
+    """
+    if not time_val or str(time_val).strip() in ["--", "", "None"]:
+        return None
+    val = str(time_val).strip()
+    if "T" in val:
+        time_part = val.split("T")[1]
+        time_part = time_part.split("+")[0].split("-")[0].replace("Z", "")
+        parts = time_part.split(":")
+        if len(parts) >= 2:
+            try:
+                return f"{int(parts[0]):02d}:{int(parts[1]):02d}"
+            except Exception:
+                pass
+    if ":" in val:
+        if "AM" in val.upper() or "PM" in val.upper():
+            try:
+                dt = datetime.strptime(val, "%I:%M %p")
+                return dt.strftime("%H:%M")
+            except Exception:
+                pass
+        parts = val.split(":")
+        if len(parts) >= 2:
+            try:
+                h_str = parts[0].strip()
+                if " " in h_str:
+                    h_str = h_str.split(" ")[-1]
+                h = int(h_str)
+                m = int(parts[1][:2])
+                return f"{h:02d}:{m:02d}"
+            except Exception:
+                return val
+    return val
+
+
+def add_minutes_to_time_str(time_str: Optional[str], minutes: int) -> Optional[str]:
+    """
+    Adds integer minutes to an HH:MM time string, wrapping around 24 hours.
+    Returns None if time_str is invalid or missing.
+    """
+    cleaned = extract_time_str(time_str)
+    if not cleaned or ":" not in cleaned:
+        return None
+    try:
+        parts = cleaned.split(":")
+        h = int(parts[0])
+        m = int(parts[1])
+        total_mins = (h * 60 + m + int(minutes)) % (24 * 60)
+        new_h = total_mins // 60
+        new_m = total_mins % 60
+        return f"{new_h:02d}:{new_m:02d}"
+    except Exception:
+        return None
+
+
+# ---------------------------------------------------------
 # Dynamic Congestion, ETA, and Quality-Derived Confidence
 # ---------------------------------------------------------
 def calculate_dynamic_congestion_headway(current_hour: int, is_priority: bool) -> float:
@@ -606,31 +671,64 @@ async def get_train_forecast(
         historical_status = "SCHEDULE_ONLY"
 
     # Fetch Real Atmospheric Weather Telemetry (Open-Meteo)
+    weather_lat = lat
+    weather_lng = lng
+    if weather_lat is None or weather_lng is None:
+        target_codes = [
+            str(live_res.get("current_station_code", "")).upper() if is_live_ok else "",
+            str(live_res.get("previous_halt", {}).get("stationCode", "")).upper() if (is_live_ok and live_res.get("previous_halt")) else "",
+            str(live_res.get("next_halt", {}).get("stationCode", "")).upper() if (is_live_ok and live_res.get("next_halt")) else ""
+        ]
+        for tc in target_codes:
+            if not tc:
+                continue
+            matching_st = next((s for s in timetable_stops if s.get("station_code", "").upper() == tc), None)
+            if matching_st and matching_st.get("lat") is not None and matching_st.get("lng") is not None:
+                weather_lat = float(matching_st["lat"])
+                weather_lng = float(matching_st["lng"])
+                break
+
     weather_telemetry_obj = None
     weather_dict = None
-    if lat is not None and lng is not None:
-        weather_dict = await fetch_live_weather(lat, lng)
+    if weather_lat is not None and weather_lng is not None:
+        weather_dict = await fetch_live_weather(weather_lat, weather_lng)
         if weather_dict and weather_dict.get("weather_status") == "available":
             weather_telemetry_obj = WeatherTelemetry(
                 visibility_meters=int(round(float(weather_dict["visibility_meters"]))),
                 condition=weather_dict.get("condition", "Clear Visibility"),
                 weather_status="available"
             )
-            effective_data_mode = "hybrid"
-        else:
-            weather_telemetry_obj = WeatherTelemetry(
-                visibility_meters=None,
-                condition="Weather telemetry unavailable",
-                weather_status="unavailable"
-            )
-            effective_data_mode = "scheduled" if running_status in ["not-started", "scheduled"] else "live"
-    else:
+
+    if not weather_telemetry_obj:
         weather_telemetry_obj = WeatherTelemetry(
             visibility_meters=None,
             condition="Weather telemetry unavailable",
             weather_status="unavailable"
         )
+
+    # 1. Fix data_mode semantics: Never label data_mode as 'scheduled' when live telemetry is active
+    if is_live_ok and running_status not in ["not-started", "scheduled"]:
+        if weather_telemetry_obj.weather_status == "available":
+            effective_data_mode = "hybrid"
+        else:
+            effective_data_mode = "live"
+    else:
         effective_data_mode = "scheduled"
+
+    # Step 2b: Dynamic ETA Delay & Quality-Derived Confidence (derived before timeline construction)
+    is_priority = any(p in train_name for p in ["Rajdhani", "Vande", "Shatabdi", "Tejas", "Duronto"])
+    has_prev_dep = bool(is_live_ok and live_res.get("previous_halt"))
+
+    pred_delay, conf_score, interval, root_causes = compute_truthful_eta_and_confidence(
+        cur_delay_mins=cur_delay,
+        current_speed_kmh=cur_speed if is_live_ok else 0,
+        has_live_location=(weather_lat is not None and weather_lng is not None),
+        has_prev_departure=has_prev_dep,
+        has_verified_timetable=bool(timetable_stops),
+        weather_telemetry=weather_dict,
+        is_priority=is_priority,
+        is_simulated=False
+    )
 
     # =========================================================
     # Step 3: Build Truthful Route Stops & Station Details
@@ -638,46 +736,98 @@ async def get_train_forecast(
     live_route = live_res.get("route", []) if is_live_ok else []
     live_stops_by_code = {st["station_code"].upper(): st for st in live_route if st.get("station_code")}
 
+    cur_code = str(live_res.get("current_station_code", "")).upper() if is_live_ok else ""
+    next_code = str(live_res.get("next_halt", {}).get("stationCode", "")).upper() if is_live_ok and live_res.get("next_halt") else ""
+    prev_code = str(live_res.get("previous_halt", {}).get("stationCode", "")).upper() if is_live_ok and live_res.get("previous_halt") else ""
+
     mapped_full_route: List[StationStopDetail] = []
     passed_current = False
 
-    for st in timetable_stops:
+    for idx, st in enumerate(timetable_stops):
         s_code = st["station_code"].upper()
         s_name = st["station_name"]
         l_stop = live_stops_by_code.get(s_code, {})
 
         if is_live_ok:
-            is_cur = (s_code == str(live_res.get("current_station_code", "")).upper())
-            if is_cur:
+            l_status = (l_stop.get("status") or "").lower()
+            is_cur = (s_code == cur_code)
+            is_next = (s_code == next_code)
+
+            if running_status in ["not-started", "scheduled"]:
+                stop_status = "Upcoming" if not is_cur else "At Station"
+            elif running_status in ["completed", "arrived"]:
+                stop_status = "Departed" if idx < len(timetable_stops) - 1 else "Arrived"
+            elif l_status in ["departed", "passed"]:
+                stop_status = "Departed"
+            elif is_cur:
+                stop_status = "In Transit" if live_res.get("current_section_status") == "running" else "At Station"
+                passed_current = True
+            elif is_next:
                 stop_status = "In Transit"
+                passed_current = True
+            elif l_status in ["upcoming"]:
+                stop_status = "Upcoming"
+                passed_current = True
+            elif l_status in ["arrived", "current"]:
+                stop_status = "At Station"
                 passed_current = True
             elif not passed_current:
                 stop_status = "Departed"
             else:
                 stop_status = "Upcoming"
 
-            if running_status in ["not-started", "scheduled"]:
-                stop_status = "Upcoming" if not is_cur else "At Station"
-
             st_plat = l_stop.get("platform") or st.get("platform")
             st_plat_status = "available" if st_plat else "unavailable"
-            raw_del = l_stop.get("delay_arrival_mins") or l_stop.get("delay_departure_mins") or (cur_delay if stop_status != "Upcoming" else 0) or 0
-            st_delay = int(round(float(raw_del)))
-            act_arr = l_stop.get("actual_arrival") or (st.get("scheduled_arrival") if stop_status == "Departed" else "--")
-            act_dep = l_stop.get("actual_departure") or (st.get("scheduled_departure") if stop_status == "Departed" else "--")
+
+            # Compute stop delay
+            l_arr_del = l_stop.get("delay_arrival_mins")
+            l_dep_del = l_stop.get("delay_departure_mins")
+            if l_arr_del is not None and int(round(float(l_arr_del))) > 0:
+                st_delay = int(round(float(l_arr_del)))
+            elif l_dep_del is not None and int(round(float(l_dep_del))) > 0:
+                st_delay = int(round(float(l_dep_del)))
+            elif stop_status == "Departed":
+                st_delay = int(round(float(l_dep_del or l_arr_del or 0)))
+            else:
+                st_delay = int(round(float(pred_delay if pred_delay > 0 else cur_delay)))
+
+            raw_sched_arr = extract_time_str(st.get("scheduled_arrival")) or "--"
+            raw_sched_dep = extract_time_str(st.get("scheduled_departure")) or "--"
+            raw_act_arr = extract_time_str(l_stop.get("actual_arrival"))
+            raw_act_dep = extract_time_str(l_stop.get("actual_departure"))
+
+            if stop_status == "Departed":
+                act_arr = raw_act_arr or (raw_sched_arr if raw_sched_arr != "--" else "--")
+                act_dep = raw_act_dep or (raw_sched_dep if raw_sched_dep != "--" else "--")
+            else:
+                if raw_act_arr:
+                    act_arr = raw_act_arr
+                elif st_delay > 0 and raw_sched_arr != "--":
+                    act_arr = add_minutes_to_time_str(raw_sched_arr, st_delay) or raw_sched_arr
+                else:
+                    act_arr = "--"
+
+                if raw_act_dep:
+                    act_dep = raw_act_dep
+                elif st_delay > 0 and raw_sched_dep != "--":
+                    act_dep = add_minutes_to_time_str(raw_sched_dep, st_delay) or raw_sched_dep
+                else:
+                    act_dep = "--"
         else:
             stop_status = "Upcoming"
             st_plat = st.get("platform")
             st_plat_status = "available" if st_plat else "unavailable"
             st_delay = 0
+            raw_sched_arr = extract_time_str(st.get("scheduled_arrival")) or "--"
+            raw_sched_dep = extract_time_str(st.get("scheduled_departure")) or "--"
             act_arr = "--"
             act_dep = "--"
 
         mapped_full_route.append(StationStopDetail(
             station_code=s_code,
             station_name=s_name,
-            scheduled_arrival=st.get("scheduled_arrival") or "--",
-            scheduled_departure=st.get("scheduled_departure") or "--",
+            scheduled_arrival=raw_sched_arr,
+            scheduled_departure=raw_sched_dep,
             actual_arrival=act_arr,
             actual_departure=act_dep,
             delay_mins=st_delay,
@@ -695,56 +845,73 @@ async def get_train_forecast(
     if mapped_full_route:
         # 1. Origin Stop
         first_st = mapped_full_route[0]
+        orig_sched = first_st.scheduled_departure if first_st.scheduled_departure != "--" else first_st.scheduled_arrival
+        if first_st.status == "Departed":
+            orig_pred = first_st.actual_departure if first_st.actual_departure != "--" else (
+                first_st.actual_arrival if first_st.actual_arrival != "--" else orig_sched
+            )
+        else:
+            orig_pred = (
+                add_minutes_to_time_str(orig_sched, cur_delay) if cur_delay > 0 and orig_sched != "--"
+                else orig_sched
+            )
         timeline_stops.append(TimelineStop(
             station=first_st.station_name,
-            scheduled=first_st.scheduled_departure,
-            predicted=first_st.actual_departure if first_st.actual_departure != "--" else first_st.scheduled_departure,
+            scheduled=orig_sched,
+            predicted=orig_pred or orig_sched,
             status=first_st.status
         ))
 
         # 2. Intermediate / Current / Next Stop
-        curr_or_next = next((s for s in mapped_full_route if s.status in ["In Transit", "At Station", "Upcoming"]), None)
-        if curr_or_next and curr_or_next.station_code != first_st.station_code and curr_or_next.station_code != mapped_full_route[-1].station_code:
+        curr_or_next = next((s for s in mapped_full_route[1:-1] if s.status in ["In Transit", "At Station", "Upcoming"]), None)
+        if not curr_or_next and len(mapped_full_route) > 2:
+            curr_or_next = mapped_full_route[len(mapped_full_route) // 2]
+
+        if curr_or_next:
+            mid_sched = curr_or_next.scheduled_arrival if curr_or_next.scheduled_arrival != "--" else curr_or_next.scheduled_departure
+            if curr_or_next.status == "Departed":
+                mid_pred = curr_or_next.actual_departure if curr_or_next.actual_departure != "--" else (
+                    curr_or_next.actual_arrival if curr_or_next.actual_arrival != "--" else mid_sched
+                )
+            else:
+                if curr_or_next.actual_arrival != "--" and curr_or_next.actual_arrival != mid_sched:
+                    mid_pred = curr_or_next.actual_arrival
+                elif curr_or_next.delay_mins > 0 and mid_sched != "--":
+                    mid_pred = add_minutes_to_time_str(mid_sched, curr_or_next.delay_mins) or mid_sched
+                elif (pred_delay > 0 or cur_delay > 0) and mid_sched != "--":
+                    mid_pred = add_minutes_to_time_str(mid_sched, pred_delay or cur_delay) or mid_sched
+                else:
+                    mid_pred = mid_sched
+
             timeline_stops.append(TimelineStop(
                 station=curr_or_next.station_name,
-                scheduled=curr_or_next.scheduled_arrival or curr_or_next.scheduled_departure,
-                predicted=curr_or_next.actual_arrival if curr_or_next.actual_arrival != "--" else curr_or_next.scheduled_arrival,
+                scheduled=mid_sched,
+                predicted=mid_pred or mid_sched,
                 status=curr_or_next.status
-            ))
-        elif len(mapped_full_route) > 2:
-            mid_st = mapped_full_route[len(mapped_full_route) // 2]
-            timeline_stops.append(TimelineStop(
-                station=mid_st.station_name,
-                scheduled=mid_st.scheduled_arrival,
-                predicted=mid_st.scheduled_arrival,
-                status=mid_st.status
             ))
 
         # 3. Destination Terminal
         last_st = mapped_full_route[-1]
+        dest_sched = last_st.scheduled_arrival if last_st.scheduled_arrival != "--" else last_st.scheduled_departure
+        if last_st.status in ["Departed", "Arrived"]:
+            dest_pred = last_st.actual_arrival if last_st.actual_arrival != "--" else dest_sched
+        else:
+            if last_st.actual_arrival != "--" and last_st.actual_arrival != dest_sched:
+                dest_pred = last_st.actual_arrival
+            elif last_st.delay_mins > 0 and dest_sched != "--":
+                dest_pred = add_minutes_to_time_str(dest_sched, last_st.delay_mins) or dest_sched
+            elif (pred_delay > 0 or cur_delay > 0) and dest_sched != "--":
+                delay_val = pred_delay if pred_delay > 0 else cur_delay
+                dest_pred = add_minutes_to_time_str(dest_sched, delay_val) or dest_sched
+            else:
+                dest_pred = dest_sched
+
         timeline_stops.append(TimelineStop(
             station=last_st.station_name,
-            scheduled=last_st.scheduled_arrival,
-            predicted=last_st.scheduled_arrival,
+            scheduled=dest_sched,
+            predicted=dest_pred or dest_sched,
             status=last_st.status
         ))
-
-    # =========================================================
-    # Step 5: Dynamic ETA Delay & Quality-Derived Confidence
-    # =========================================================
-    is_priority = any(p in train_name for p in ["Rajdhani", "Vande", "Shatabdi", "Tejas", "Duronto"])
-    has_prev_dep = bool(is_live_ok and live_res.get("previous_halt"))
-
-    pred_delay, conf_score, interval, root_causes = compute_truthful_eta_and_confidence(
-        cur_delay_mins=cur_delay,
-        current_speed_kmh=cur_speed if is_live_ok else 0,
-        has_live_location=(lat is not None and lng is not None),
-        has_prev_departure=has_prev_dep,
-        has_verified_timetable=bool(timetable_stops),
-        weather_telemetry=weather_dict,
-        is_priority=is_priority,
-        is_simulated=False
-    )
 
     if not is_live_ok:
         curr_status_text = "Live telemetry unavailable (Showing scheduled timetable)"
@@ -765,12 +932,20 @@ async def get_train_forecast(
     prev_station_dep = None
     if is_live_ok and live_res.get("previous_halt"):
         prev_h = live_res["previous_halt"]
+        prev_code_lookup = str(prev_h.get("stationCode", "")).upper()
+        p_live = live_stops_by_code.get(prev_code_lookup, {})
+        p_sched = next((s for s in timetable_stops if s.get("station_code", "").upper() == prev_code_lookup), {})
+
+        p_sched_dep = extract_time_str(p_sched.get("scheduled_departure") or p_live.get("scheduled_departure")) or "--"
+        p_act_dep = extract_time_str(p_live.get("actual_departure")) or (p_sched_dep if p_sched_dep != "--" else "--")
+        p_delay = int(round(float(p_live.get("delay_departure_mins", cur_delay) or cur_delay)))
+
         prev_station_dep = PreviousStationDeparture(
             station_code=prev_h.get("stationCode", "PREV"),
             station_name=prev_h.get("stationName", "Previous Station"),
-            scheduled_departure="--",
-            actual_departure="--",
-            departure_delay_mins=cur_delay
+            scheduled_departure=p_sched_dep,
+            actual_departure=p_act_dep,
+            departure_delay_mins=p_delay
         )
 
     return TrainForecastResponse(
