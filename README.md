@@ -144,20 +144,36 @@ Southern Corridor: KSR Bengaluru → Jolarpettai → MGR Chennai Central (Train 
 
 
 
-## 🔌 API Specification & Sample Responses
+## 🔌 SETU AI: Core API Reference & Response Schemas
 
-Below are the endpoints and data models used in the system.
+SETU AI implements a rigorous, strongly-typed data validation ecosystem constructed via **FastAPI Validation Layouts** and **Pydantic Structural Model Contracts**. The platform operates under a strict `REAL_DATA_FIRST` engineering mandate. Developers can access and audit local interactive Swagger environments at `http://127.0.0`.
 
+---
 
-### 1. ML Delay Forecast & XAI
-* **Endpoint:** `GET /api/v1/trains/{train_number}/forecast`
-* **Description:** Returns machine learning delay predictions along with explainable AI (XAI) root causes.
+### 🧠 1. Passenger Intelligence: ML Delay Prediction & Explainable AI (XAI)
+* **Resource Path:** `GET /api/v1/trains/{train_number}/forecast`
+* **Functional Overview:** Simultaneously aggregates static scheduling matrices and live transit metrics from the `RailRadar` streaming pipeline. It merges these inputs with real-time atmospheric variables via the `Open-Meteo` framework, channeling the final feature arrays into an asymmetric Gradient Boosting Regressor model.
+* **URL Parameters:**
+  * `date` (Optional String, expected format: `YYYY-MM-DD` — defaults to the active Indian Standard Time boundary if omitted).
+  * `boarding_station` (Optional String — verifies the argument against confirmed route stop codes).
+  * `mode` (Optional String, configuration limits: `live` | `simulated` | `demo`).
+* **⚠️ Error Handling Matrix:** 
+  * `400 Bad Request` — Triggered if the train identifier length falls outside the 3–8 character boundary, or if the specified `boarding_station` does not map to a valid stop along the official route itinerary.
+  * `404 Not Found` — Issued when the train code is completely missing from current live monitoring grids or the static evaluation environment.
+  * `503 Service Unavailable` — Returned if the primary railway data stream experiences an outage. The system strictly avoids substituting synthetic or placeholder data under this condition.
 
-#### Sample JSON Response
+#### Production JSON Payload (200 OK — Hybrid Processing)
 ```json
 {
   "train_number": "12123",
   "train_name": "Deccan Queen Express",
+  "journey_date": "2026-09-25",
+  "boarding_station": "LTT",
+  "telemetry_source": "RAILRADAR_AUTHORITATIVE_LIVE",
+  "data_source": "railradar",
+  "data_mode": "hybrid",
+  "current_status": "Running late by 15 mins",
+  "current_speed_kmh": 85,
   "current_delay_mins": 15,
   "predicted_downstream_delay_mins": 34,
   "confidence_score": 88,
@@ -165,44 +181,199 @@ Below are the endpoints and data models used in the system.
     "p10_mins": 28,
     "p90_mins": 42
   },
+  "next_station": "Karjat Junction",
   "weather_telemetry": {
     "visibility_meters": 450,
-    "condition": "Severe Fog Alert"
+    "condition": "Severe Fog Alert",
+    "weather_status": "available"
+  },
+  "platform": "Platform 3",
+  "platform_status": "available",
+  "previous_station_departure": {
+    "station_code": "KYN",
+    "station_name": "Kalyan Junction",
+    "scheduled_departure": "19:10",
+    "actual_departure": "19:25",
+    "departure_delay_mins": 15
   },
   "root_causes": [
     {
-      "factor": "Precedence Loop Line Hold",
+      "factor": "Section Headway Density (0.74)",
       "impact_mins": 11
     },
     {
-      "factor": "Weather Fog Speed Restriction",
+      "factor": "Dense Fog & Poor Visibility (450m)",
       "impact_mins": 8
     }
-  ]
+  ],
+  "timeline": [
+    {
+      "station": "Lokmanya Tilak Terminus",
+      "scheduled": "18:40",
+      "predicted": "18:40",
+      "status": "Departed"
+    }
+  ],
+  "historical_data_status": "LIVE_FEED"
 }
 ```
 
+---
 
-### 2. Multi-Train Fleet Radar
-* **Endpoint:** `GET /api/v1/corridor/fleet-overview`
-* **Description:** Returns the active corridor state across all tracked rakes. 
-
-#### Systemic Risk Levels
-The system categorizes risk into three distinct statuses:
-* 🟢 **NOMINAL** – Normal operating conditions.
-* 🟡 **MODERATE PROPAGATION** – Minor delays spreading through the corridor.
-* 🔴 **CRITICAL BOTTLENECK** – Severe congestion causing major holdups.
-
-
-### 3. Sub-Second Broadcasts
-* **Description:** Continuous coordinate streams sent every **2 seconds** to ensure ultra-smooth marker transitions on user interface (UI) maps.
-* **Data Fields Transmitted:**
-  * `lat` (Latitude)
-  * `lng` (Longitude)
-  * `speed_kmh` (Speed in Kilometers per Hour)
-  * `active_block_section` (Current track block)
+### 💬 2. Prediction Context & Narrative Explainer
+* **Resource Path:** `POST /api/v1/trains/{train_number}/explanation`
+* **Functional Overview:** Transmits a calculated prediction dataset directly into the Gemini LLM infrastructure, translating complex mathematical distribution models into intuitive, plain-text alerts for travelers.
+* **Payload Structure (JSON):**
+```json
+{
+  "forecast": {
+    "train_number": "12123",
+    "current_delay_mins": 15,
+    "weather_telemetry": { "condition": "Severe Fog Alert" }
+  }
+}
+```
 
 ---
+
+### 🗺️ 3. Geographic Telemetry: Route Polylines & Live Mapping Data
+* **Resource Path:** `GET /api/v1/trains/{train_number}/route-geometry`
+* **Functional Overview:** Retrieves authenticated GeoJSON vectors and ordered node sequences directly from the `RailRadar` engine, facilitating smooth polyline rendering on front-end Leaflet canvas elements.
+* **URL Parameters:** `date` (Optional), `mode` (Supported values: `live` | `simulated` | `demo`).
+
+#### Production JSON Payload (200 OK)
+```json
+{
+  "train_number": "12123",
+  "status": "ACTIVE_GEOJSON_VERIFIED",
+  "data_source": "railradar",
+  "data_mode": "live",
+  "polyline": [
+    [19.0667, 72.8900],
+    [19.2345, 73.1389]
+  ],
+  "critical_waypoints": [
+    { "code": "LTT", "name": "Lokmanya Tilak Terminus", "lat": 19.0667, "lng": 72.8900 }
+  ],
+  "stations": []
+}
+```
+
+---
+
+### 📊 4. Locational & Operational Telemetry Tracker
+* **Resource Path:** `GET /api/v1/trains/{train_number}/telemetry`
+* **Functional Overview:** A lightweight, high-frequency polling endpoint designed to return current moving-block telemetry values for isolated active locomotives.
+
+---
+
+### 🧳 5. Station Platform Assignments & Coach Layouts
+* **Resource Path:** `GET /api/v1/trains/{train_number}/coaches/{station_code}`
+* **Functional Overview:** Pulls explicit physical coach arrangements, train reversal states, and exact arrival platform configurations without using synthetic estimates.
+
+#### Production JSON Payload (200 OK)
+```json
+{
+  "train_number": "12123",
+  "train_name": "Deccan Queen Express",
+  "station_code": "KYN",
+  "station_name": "Kalyan Junction",
+  "platform": "3",
+  "platform_status": "available",
+  "reversal": false,
+  "total_coaches": 22,
+  "formation": "ENG-GEN-A1-B1-B2-S1-S2-GEN",
+  "rake": [],
+  "data_source": "railradar"
+}
+```
+
+---
+
+### 🔍 6. Inter-Station Transit Discovery Engine
+* **Resource Path:** `GET /api/v1/trains/between/{from_station}/{to_station}`
+* **Functional Overview:** Details scheduled rolling stock operating directly between two designated transportation hubs over a chosen time horizon.
+
+---
+
+### 🏓 7. Live Terminal Departure & Arrival Boards
+* **Resource Path:** `GET /api/v1/stations/{station_code}/board`
+* **Functional Overview:** Generates an active log of scheduled versus adjusted train movement timings across a distinct station hub, using a customizable sliding lookahead window.
+* **URL Parameters:** `hours` (Integer value — falls back to a 4-hour window by default).
+
+---
+
+### 📡 8. Network Operations Radar: Regional Fleet Overview
+* **Resource Path:** `GET /api/v1/corridor/fleet-overview`
+* **Functional Overview:** Monitored tracking of multiple active assets (`12919`, `12123`, `22221`, `22436`, `12301`) over saturated trunk lines to diagnose and mitigate cascading infrastructure delays.
+
+#### Corridor System Risk Architecture
+* 🟢 **NOMINAL** — Efficient train pacing across the designated block section.
+* 🟡 **MODERATE PROPAGATION** — Minor downstream delay leaking into subsequent segments.
+* 🔴 **CRITICAL BOTTLENECK** — Pervasive gridlock and capacity saturation causing network immobility.
+
+---
+
+### 🎛️ 9. Dispatch Simulation Architecture: "What-If" Optimizer
+* **Resource Path:** `POST /api/v1/authority/dispatch-solve`
+* **Functional Overview:** Evaluates safety margins and headway gaps (`<3.2km`) between conflicting traffic demands, proposing dynamic loop-line siding holds to prioritize express trains.
+* **URL Parameters:** `train_a` (String), `train_b` (String), `overtakes_allowed` (Boolean).
+
+#### Production JSON Payload (200 OK)
+```json
+{
+  "section": "Satna (STA) - Manikpur (MKP) Single Line Block",
+  "conflict_identified": "Train 12123 trailing Train 12301 within headway threshold (<3.2km)",
+  "optimal_action": "Hold Train 12123 at Satna Loop Line 2 for 7 minutes",
+  "rationale": "Clears path for higher priority rake 12301 avoiding cascade delay across 4 following sections",
+  "projected_systemic_delay_saved_mins": 24,
+  "execution_status": "APPROVED_DISPATCH_PLAN"
+}
+```
+
+---
+
+### ✉️ 10. Passenger Feedback Ingestion Pipeline (Anti-Abuse Protected)
+* **Resource Path:** `POST /api/v1/feedback`
+* **Functional Overview:** Collects live crowd-sourced observations and maps them to appropriate internal developer logs.
+* **🛡️ Security Rate Limiting:** Enforces a rigid limit of 5 submissions per rolling 10-minute window per client IP address to prevent system abuse (Returns `429 Too Many Requests`).
+
+#### Input Schema Specification (`FeedbackSubmissionRequest`):
+```json
+{
+  "feedback_type": "Variance Report",
+  "rating": 5,
+  "message": "Train is currently held right outside the outer signal.",
+  "name": "Jane Doe",
+  "email": "jane@example.com",
+  "train_number": "12123",
+  "journey_date": "2026-09-25",
+  "boarding_station": "LTT"
+}
+```
+
+---
+
+### 🔌 11. Sub-Second Real-Time Telemetry Streaming (WebSockets)
+* **Connection Handshake:** `ws://127.0.0.1:8000/ws/trains/{train_number}/live`
+* **Functional Overview:** Establishes a persistent, bidirectional WebSocket connection pushing coordinate payloads every **2 seconds** to drive real-time asset tracking animations on map frontends.
+
+#### Outbound Telemetry Data Frame:
+```json
+{
+  "train_number": "12123",
+  "telemetry": {
+    "latitude": 19.0667,
+    "longitude": 72.8900,
+    "current_speed_kmh": 78,
+    "active_block_section": "CR-KYN-IGP-02",
+    "section_progress_pct": 64.5,
+    "timestamp": 1790382900.2
+  },
+  "server_timestamp": 1790382902.5
+}
+```
+
 
 ## ⚙️ Quickstart & Local Setup
 
